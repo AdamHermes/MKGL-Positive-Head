@@ -1,6 +1,5 @@
 from torchdrug import core, data, utils
 from torch_sparse import spmm
-from torch_scatter import scatter_add
 import torch
 
 

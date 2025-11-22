@@ -2,7 +2,6 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from torch_scatter import  scatter_add
 
 from torchdrug import core, layers
 from torchdrug.layers import functional
@@ -11,6 +10,26 @@ from torchdrug.core import Registry as R
 from .util import VirtualTensor, Range, RepeatGraph
 from .util import bincount, variadic_topks
 from .layer import *
+
+def scatter_add(src, index, dim=0, dim_size=None):
+    """
+    Drop-in replacement for torch_scatter.scatter_add.
+    Uses torch.index_add_.
+    """
+    if dim_size is None:
+        dim_size = int(index.max().item()) + 1
+
+    out_shape = list(src.shape)
+    out_shape[dim] = dim_size
+    out = torch.zeros(out_shape, device=src.device, dtype=src.dtype)
+
+    # expand index to match src shape
+    expand_index = [slice(None)] * src.dim()
+    expand_index[dim] = None
+    index_expanded = index.unsqueeze(dim).expand_as(src)
+
+    out.index_add_(dim, index, src)
+    return out
 
 @R.register("PNA")
 class PNA(nn.Module, core.Configurable):
