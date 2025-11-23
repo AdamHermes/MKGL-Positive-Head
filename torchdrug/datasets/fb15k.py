@@ -2,8 +2,9 @@ import os
 
 from torch.utils import data as torch_data
 
-from . import data, utils
-from ..core import Registry as R
+from .. import data, utils
+from ..core import R
+
 
 
 @R.register("datasets.FB15k")
