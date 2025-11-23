@@ -2,6 +2,7 @@ import torch
 from contextlib import contextmanager
 from .utils import sparse_coo_tensor
 
+# --- Existing PackedGraph (keeps previous functionality) ---
 class PackedGraph:
     """
     A lightweight graph object sufficient for the code in layer.py and model.py.
@@ -167,3 +168,99 @@ class PackedGraph:
     def data_by_meta(self, key):
         # placeholder used in model.py; return empty dicts
         return {}, {}
+
+# --- New minimal Graph & KnowledgeGraphDataset classes for datasets.py usage ---
+class Graph:
+    """
+    Minimal Graph container used by dataset loaders.
+    Stores triplets as (h, t, r) list/iterable and basic metadata.
+    """
+    def __init__(self, triplets, num_node=None, num_relation=None):
+        # accept list of tuples, or tensor of shape (N,3)
+        if isinstance(triplets, torch.Tensor):
+            self.edge_list = triplets.t().contiguous() if triplets.numel() else torch.zeros((3,0), dtype=torch.long)
+        else:
+            if len(triplets) == 0:
+                self.edge_list = torch.zeros((3,0), dtype=torch.long)
+            else:
+                arr = torch.tensor(triplets, dtype=torch.long)
+                self.edge_list = arr.t().contiguous()
+        # expose similar attributes used elsewhere
+        self.num_node = int(num_node) if num_node is not None else int(self.edge_list.max().item() + 1) if self.edge_list.numel() else 0
+        self.num_relation = int(num_relation) if num_relation is not None else int(self.edge_list[2].max().item() + 1) if self.edge_list.numel() else 0
+        # For compatibility with PackedGraph, provide edge_list, edge_weight, etc.
+        self.edge_weight = torch.ones((self.edge_list.shape[1],), dtype=torch.float)
+        self.adjacency = None
+        self.boundary = None
+        self.query = None
+        self.edge2graph = torch.zeros((self.edge_list.shape[1],), dtype=torch.long) if self.edge_list.numel() else torch.zeros((0,), dtype=torch.long)
+        self.node2graph = torch.zeros((self.num_node,), dtype=torch.long)
+
+    def to(self, device):
+        self.edge_list = self.edge_list.to(device)
+        self.edge_weight = self.edge_weight.to(device)
+        self.edge2graph = self.edge2graph.to(device)
+        self.node2graph = self.node2graph.to(device)
+        return self
+
+    def match(self, pattern):
+        # reuse simple matching like PackedGraph.match
+        pat = pattern.view(-1, 3)
+        E = self.edge_list.shape[1]
+        edges = self.edge_list.t()  # (E,3)
+        matches = []
+        for p in pat:
+            cond = torch.ones((E,), dtype=torch.bool)
+            for i in range(3):
+                if p[i].item() != -1:
+                    cond = cond & (edges[:, i] == p[i].item())
+            matches.append(cond.nonzero(as_tuple=False).squeeze(-1))
+        if matches:
+            idx = torch.cat(matches)
+        else:
+            idx = torch.tensor([], dtype=torch.long)
+        return idx, None
+
+    def edge_mask(self, mask):
+        # similar to PackedGraph.edge_mask
+        if mask.numel() != self.edge_list.shape[1]:
+            raise ValueError("mask length mismatch")
+        keep_idx = mask.nonzero(as_tuple=False).squeeze(-1)
+        if keep_idx.numel() == 0:
+            return Graph([], num_node=self.num_node, num_relation=self.num_relation)
+        new_edge_list = self.edge_list[:, keep_idx]
+        new_edge_weight = self.edge_weight[keep_idx]
+        g = Graph([], num_node=self.num_node, num_relation=self.num_relation)
+        g.edge_list = new_edge_list
+        g.edge_weight = new_edge_weight
+        g.edge2graph = getattr(self, "edge2graph", torch.zeros((new_edge_list.shape[1],), dtype=torch.long))
+        g.node2graph = getattr(self, "node2graph", torch.zeros((self.num_node,), dtype=torch.long))
+        return g
+
+# Base dataset used in your datasets.py
+class KnowledgeGraphDataset:
+    """
+    Minimal base to support InductiveKnowledgeGraphDataset in datasets.py.
+    Provides a small helper to standardize vocabs.
+    """
+    def __init__(self):
+        # placeholders often used by code
+        self.graph = None
+        self.fact_graph = None
+        self.inductive_graph = None
+        self.inductive_fact_graph = None
+        self.kgdata = None
+
+    def _standarize_vocab(self, vocab, inv_vocab):
+        """
+        Convert inv_vocab (token -> id) to vocab (id -> token).
+        If vocab provided, return as-is.
+        """
+        if inv_vocab is None:
+            inv_vocab = {}
+        if vocab is None:
+            # build id->token list aligned by indices
+            vocab = [None] * len(inv_vocab)
+            for token, idx in inv_vocab.items():
+                vocab[idx] = token
+        return vocab, inv_vocab
