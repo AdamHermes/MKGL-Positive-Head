@@ -2,8 +2,8 @@ import os
 
 from torch.utils import data as torch_data
 
-from .torchdrug import data, utils
-from .torchdrug.core import Registry as R
+from . import data, utils
+from ..core import Registry as R
 
 
 @R.register("datasets.FB15k")
