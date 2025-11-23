@@ -4,7 +4,7 @@ from tqdm import tqdm
 import torch
 from torch.utils import data as torch_data
 
-from torchdrug import data, datasets, utils
+from torchdrug import data, utils
 from torchdrug.core import R
 
 
