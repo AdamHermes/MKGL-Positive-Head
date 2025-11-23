@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 from torchdrug import core, data, layers, utils
 from torchdrug.layers import functional
-from torchdrug.core import Registry as R
+from torchdrug.core import R
 
 
 @R.register("layer.PNALayer")

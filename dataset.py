@@ -5,7 +5,7 @@ import torch
 from torch.utils import data as torch_data
 
 from torchdrug import data, datasets, utils
-from torchdrug.core import Registry as R
+from torchdrug.core import R
 
 
 class InductiveKnowledgeGraphDataset(data.KnowledgeGraphDataset):
